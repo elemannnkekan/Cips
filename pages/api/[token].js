@@ -1,26 +1,35 @@
-import fs from "fs";
-import path from "path";
+// Dinamik olarak verilen token'ı kontrol eden endpoint
 
-export default async function handler(req, res) {
-  const filePath = path.resolve("/tmp", "tokens.json");
+const keys = {}; // Bu örnekte RAM'de tutuluyor, üretim için veritabanı önerilir
 
-  if (!fs.existsSync(filePath)) {
-    return res.status(200).json({ valid: false, deleted: true, info: null });
-  }
-
-  const data = JSON.parse(fs.readFileSync(filePath, "utf-8"));
+export function createKey(ip, userId, durationMs = 60000) {
+  const token = crypto.randomUUID();
   const now = Date.now();
+  const keyData = {
+    valid: true,
+    deleted: false,
+    info: {
+      token,
+      createdAt: now,
+      expiresAfter: now + durationMs,
+      userId,
+    },
+  };
+  keys[token] = keyData;
+  return keyData;
+}
 
+export function getKeyByToken(token) {
+  const keyData = keys[token];
+  if (!keyData || Date.now() > keyData.info.expiresAfter) {
+    return { valid: false };
+  }
+  return keyData;
+}
+
+export default function handler(req, res) {
   const { token } = req.query;
-  const foundEntry = Object.values(data).find(entry => entry.token === token);
 
-  if (!foundEntry) {
-    return res.status(200).json({ valid: false, deleted: true, info: null });
-  }
-
-  if (now > foundEntry.expiresAfter) {
-    return res.status(200).json({ valid: false, deleted: true, info: null });
-  }
-
-  return res.status(200).json({ valid: true, deleted: false, info: foundEntry });
+  const keyData = getKeyByToken(token);
+  res.status(200).json(keyData);
 }
